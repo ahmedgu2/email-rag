@@ -1,4 +1,3 @@
-
 import os.path
 
 from google.auth.transport.requests import Request
@@ -7,9 +6,10 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import base64
-from email.utils import parseaddr
+from email.utils import parseaddr, parsedate_to_datetime
 from dotenv import load_dotenv
 import os
+from datetime import datetime
 
 # Load .env file and fetch paths
 load_dotenv()
@@ -52,27 +52,46 @@ def auth():
     return creds
 
 
-def fetch_emails(creds: Credentials, n_emails: int=3):
+def fetch_emails(creds: Credentials, from_date_time: datetime=None):
   try:
     # Call the Gmail API
     service = build("gmail", "v1", credentials=creds)
-    results = service.users().messages().list(userId='me', maxResults=n_emails, labelIds=['INBOX'], q='').execute()
-    messages = results.get('messages', [])
 
-    if not messages:
-      print("No messages found.")
-      return
-
-    for indx, message in enumerate(messages):
+    timestamp = int(from_date_time.timestamp())
+    query = f"after:{timestamp}"
+    
+    # Initialize variables for pagination
+    page_token = None
+    
+    while True:
+      # Get a page of messages
+      results = service.users().messages().list(
+          userId='me', 
+          labelIds=['INBOX'], 
+          q=query,
+          maxResults=500,  # Max allowed by Gmail API
+          pageToken=page_token
+      ).execute()
+      
+      messages = results.get('messages', [])
+      
+      if not messages:
+        if page_token is None:  # First page is empty
+          print("No emails found.")
+        break  # No more messages to process
+      
+      for message in messages:
         msg = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
+
         email_id = msg.get('id')
-        thread_id = msg.get('treadId')
+        thread_id = msg.get('threadId')
 
         headers = msg['payload']['headers']
-
         subject = next((h['value'] for h in headers if h['name'] == 'Subject'), '(No subject)')
         sender_name, sender_email = parseaddr(next((h['value'] for h in headers if h['name'] == 'From'), '(No sender)'))
         receiver_name, receiver_email = parseaddr(next((h['value'] for h in headers if h['name'] == 'To'), '(No receiver)'))
+        date_str = next((h['value'] for h in headers if h['name'] == 'Date'), None)
+        date_obj = parsedate_to_datetime(date_str) if date_str else None
         body = get_email_body(msg['payload'])
 
         yield {
@@ -83,16 +102,14 @@ def fetch_emails(creds: Credentials, n_emails: int=3):
             "sender_email": sender_email,
             "receiver_name": receiver_name,
             "receiver_email": receiver_email,
+            "date_time": date_obj,
             "body": body
         }
-
+      
+      # Get the token for the next page
+      page_token = results.get('nextPageToken')
+      if not page_token:
+        break  # No more pages
 
   except HttpError as error:
     print(f"An error occurred: {error}")
-
-
-if __name__ == "__main__":
-    creds = auth()
-    for email in fetch_emails(creds, 1):
-        print(email[-1])
-    
