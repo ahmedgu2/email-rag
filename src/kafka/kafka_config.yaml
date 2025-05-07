@@ -1,0 +1,12 @@
+kafka:
+  bootstrap.servers: localhost:29092
+  compression.type: snappy
+
+producer:
+  batch.size: 256
+  linger.ms: 100
+  acks: all
+
+consumer:
+  group.id: emails_retrieval
+  auto.offset.reset: earliest
