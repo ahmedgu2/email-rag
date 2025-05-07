@@ -1,6 +1,6 @@
 import weaviate
 from weaviate.util import generate_uuid5
-from email_api import auth, fetch_emails
+from src.data_ingestion.email_api import auth, fetch_emails
 from weaviate.classes.query import Filter, Sort
 from datetime import datetime, timezone
 from google.oauth2.credentials import Credentials

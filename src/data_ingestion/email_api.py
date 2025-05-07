@@ -87,13 +87,29 @@ def fetch_emails(creds: Credentials, from_date_time: datetime=None):
         thread_id = msg.get('threadId')
 
         headers = msg['payload']['headers']
-        subject = next((h['value'] for h in headers if h['name'] == 'Subject'), '(No subject)')
-        sender_name, sender_email = parseaddr(next((h['value'] for h in headers if h['name'] == 'From'), '(No sender)'))
-        receiver_name, receiver_email = parseaddr(next((h['value'] for h in headers if h['name'] == 'To'), '(No receiver)'))
-        date_str = next((h['value'] for h in headers if h['name'] == 'Date'), None)
+        subject = None
+        sender_name, sender_email = None, None
+        receiver_name, receiver_email = None, None
+        date_str = None
+        
+        for header in headers:
+            header_name = header['name'].lower()  # Case-insensitive comparison
+            if header_name == 'subject':
+                subject = header['value']
+            elif header_name == 'from':
+                sender_name, sender_email = parseaddr(header['value'])
+            elif header_name == 'to':
+                receiver_name, receiver_email = parseaddr(header['value'])
+            elif header_name == 'date':
+                date_str = header['value']
+        
+        # Set defaults for missing values
+        subject = subject or '(No subject)'
+        sender_email = sender_email or '(No sender)'
+        receiver_email = receiver_email or '(No receiver)' 
         date_obj = parsedate_to_datetime(date_str) if date_str else None
         body = get_email_body(msg['payload'])
-
+        
         yield {
             "email_id": email_id,
             "thread_id": thread_id,
